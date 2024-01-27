@@ -9,4 +9,4 @@ Through extensive simulations and real-world case studies, we demonstrate that G
 
 _Keywords:_ Bayesian inference, prior specification, shrinkage priors, variance decomposition, regularization
 
-_Citation:_  Aguilar, J.E, Bürkner, P. C. (2024). Generalized Decomposition Priors on R2, [arXiv preprin](https://arxiv.org/abs/2401.10180)
+_Citation:_  Aguilar, J.E, Bürkner, P. C. (2024). Generalized Decomposition Priors on R2, [arXiv preprint](https://arxiv.org/abs/2401.10180)
