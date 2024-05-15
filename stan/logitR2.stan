@@ -22,13 +22,13 @@ Half Student t is recommended
 */
 
 functions {
-  /* Efficient computation of the R2D2 prior
+  /* Efficient computation of the R2 prior
    * Args:
    *   z: standardized population-level coefficients
    *   phi: local weight parameters
    *   tau2: global scale parameter
    * Returns:
-   *   population-level coefficients following the R2D2 prior
+   *   population-level coefficients following the R2 prior
    */
   vector R2D2(vector z, vector sds_X, vector phi, real tau2) {
     /* Efficient computation of the R2D2 prior
@@ -59,9 +59,11 @@ data {
   vector[Ntest] ytest; // test set
   matrix[Ntest, p] Xtest; // population-level design matrix including column of 1s
   
-  // data for the R2D2 prior
-  real<lower=0> R2D2_mean_R2; // mean of the R2 prior
-  real<lower=0> R2D2_prec_R2; // precision of the R2 prior
+  // data for the R2 prior
+  real<lower=0> R2_mean; // mean of the R2 prior
+  real<lower=0> R2_prec; // precision of the R2 prior
+  
+  real<lower=0> scale_sigma; // scale for the distribution of sigma
   int prior_only; // should the likelihood be ignored?
 }
 transformed data {
@@ -92,31 +94,30 @@ transformed data {
   }
 }
 parameters {
-  // local parameters for the R2D2 prior
+  // local parameters for the LNR2 prior
   vector[pc] zbeta;
   vector[pc - 1] zphi; //transform zphi to simplex 
   real Intercept; // temporary intercept for centered predictors
   // R2D2 shrinkage parameters
-  real<lower=0, upper=1> R2D2_R2; // R2 parameter
+  real<lower=0, upper=1> R2LN_R2; // R2 parameter
   real<lower=0> sigma; // dispersion parameter
 }
 transformed parameters {
   vector[pc] beta; // population-level effects
-  real R2D2_tau2; // global R2D2 scale parameter
-  simplex[pc] R2D2_phi;
-  vector[pc - 1] logitR2D2_phi;
+  real R2_tau2; // global R2D2 scale parameter
+  simplex[pc] R2_phi;
+  vector[pc - 1] logitR2_phi;
   vector[pc] temp_logitR2D2phi;
-  R2D2_tau2 = sigma ^ 2 * R2D2_R2 / (1 - R2D2_R2); //scaled by sigma
+  R2_tau2 = sigma ^ 2 * R2LN_R2 / (1 - R2LN_R2); //scaled by sigma
   // compute actual regression coefficients
   
-  logitR2D2_phi = mu_logitphi + sqcov_logiphi * zphi; // There might be a more efficient way check, check brms 
+  logitR2_phi = mu_logitphi + sqcov_logiphi * zphi; // There might be a more efficient way check, check brms 
   
   temp_logitR2D2phi[1] = 0;
-  temp_logitR2D2phi[2 : pc] = logitR2D2_phi;
+  temp_logitR2D2phi[2 : pc] = logitR2_phi;
+  R2_phi = softmax(temp_logitR2D2phi); // ?
   
-  R2D2_phi = softmax(temp_logitR2D2phi); // ?
-  
-  beta = R2D2(zbeta, sds_X, R2D2_phi, R2D2_tau2);
+  beta = R2D2(zbeta, sds_X, R2_phi, R2_tau2);
 }
 model {
   // likelihood including constants
@@ -125,18 +126,15 @@ model {
   }
   
   // priors including constants
-  
   //R2 ~ Beta(R2mean, R2prec)
-  target += beta_lpdf(R2D2_R2 | R2D2_mean_R2 * R2D2_prec_R2, (1
-                                                              - R2D2_mean_R2)
-                                                             * R2D2_prec_R2);
+  target += beta_lpdf(R2LN_R2 | R2_mean * R2_prec, (1 - R2_mean)* R2_prec);
   
   target += std_normal_lpdf(zbeta); //normal distribution zbeta
   
   target += std_normal_lpdf(zphi); //normal distribution zphi
   
-  target += student_t_lpdf(sigma | 3, 0, sd(yc))
-            - 1 * student_t_lccdf(0 | 3, 0, sd(yc)); // scale with sd(y)
+  target += student_t_lpdf(sigma | 3, 0, scale_sigma);
+  
   
   target += normal_lpdf(Intercept | 0, 5); // Intercept  
 }
@@ -150,17 +148,17 @@ generated quantities {
   
   vector[Ntest] log_lik_test;
   array[Ntest] real y_tilde_test;
-  vector[Ntest] mu_tilde_test = rep_vector(0.0, Ntest) + ymean + Intercept
-                                + Xctest * beta;
-  
+  vector[Ntest] mu_tilde_test = rep_vector(0.0, Ntest) + b_Intercept + Xtest[,2:p] * beta;
   
   // R2
   real<lower=0, upper=1> pred_R2 = variance(mu_tilde) / (variance(mu_tilde) + sigma^2 );
   real<lower=0, upper=1> pred_R2_test = variance(mu_tilde_test) / (variance(mu_tilde_test) + sigma^2 );
   
+  real tau=1.0;
+  
   // lambdas
   
-  vector[pc] lambdas = R2D2_phi * R2D2_tau2; //variances of betas
+  vector[pc] lambda = R2_phi * R2_tau2; //variances of betas
   
   //---y_tilde calc
   
