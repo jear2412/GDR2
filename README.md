@@ -7,6 +7,11 @@ To address this, we propose the Generalized Decomposition R2 (GDR2) prior, which
 
 _Keywords:_ Bayesian inference, prior specification, shrinkage priors, variance decomposition, regularization
 
+
+How to use this repo? 
+
+The main point of this repo is that the reader gets familiarized with how to use the stan code for the Generalized Decomposition prior. The reader can take a look at example.html for this.
+
 _Citation:_  Aguilar, J.E, Bürkner, P. C. (2025).  [Generalized Decomposition Priors on R2](https://projecteuclid.org/journals/bayesian-analysis/advance-publication/Generalized-Decomposition-Priors-on-R2/10.1214/25-BA1524.full). *Bayesian Analysis*. Available for free also on [arXiv](https://arxiv.org/abs/2401.10180). doi:10.1214/25-BA1524
 
 _Funding Statement:_
@@ -14,3 +19,4 @@ Funded by Deutsche Forschungsgemeinschaft (DFG, German Research Foundation) unde
 
 _Acknowledgments:_ We would like to thank Aki Vehtari and his research group at Aalto University for their valuable comments and insightful discussions on an earlier version of this work. In particular, we are grateful to David Kohns for his detailed and constructive feedback.
 
+_Contact_ javier.aguilarr at icloud.com
