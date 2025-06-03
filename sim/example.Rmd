@@ -1,0 +1,217 @@
+
+---
+title: "Single Simulation Run"
+output: html_document
+---
+
+```{r setup, include=FALSE}
+knitr::opts_chunk$set(echo = TRUE, message = FALSE, warning = FALSE)
+```
+
+# Load Libraries
+
+```{r}
+library(cmdstanr)
+library(ggplot2)
+library(bayesplot)
+library(posterior)
+library(tidyverse)
+library(foreach)
+library(future)
+library(doFuture)
+library(mvtnorm)
+library(MASS)
+library(patchwork)
+
+source("utils/utils.R") 
+source("utils/cov_functions.R") 
+```
+
+# Generate Data
+
+```{r}
+n <- 250
+ntest <- 500
+p <- 25
+rho <- 0.5
+type <- c("ar")
+R2 <- 0.8
+seed <- 117
+
+b_Intercept <- rnorm(1, 0, 5)[1]
+b <- c(rep(5, 5), rep(0, p - 10), rep(5, 5))
+
+covx <- gen_covmatrix(list(p = p, type = type, rho = rho))
+sigma <- as.numeric(sqrt((1 - R2) / R2 * t(b) %*% covx %*% b))
+
+X <- mvtnorm::rmvnorm(n, mean = rep(0, p), sigma = covx)
+mu_train <- cbind(rep(1, n), X) %*% c(b_Intercept, b)
+y <- rnorm(n, mu_train, sigma)
+
+Xtest <- mvtnorm::rmvnorm(ntest, mean = rep(0, p), sigma = covx)
+mu_test <- cbind(rep(1, ntest), Xtest) %*% c(b_Intercept, b)
+ytest <- rnorm(ntest, mu_test, sigma)
+
+```
+
+# Simulation Parameters
+
+```{r}
+prior_only <- FALSE
+
+sim_params <- list(
+  n = n,
+  p = p,
+  X = X,
+  y = y,
+  ntest = ntest,
+  Xtest = Xtest,
+  ytest = ytest,
+  prior_only = prior_only,
+  seed = seed,
+  nchains = 4,
+  iter_warmup = 1000,
+  iter_sampling = 2000,
+  adapt_delta = 0.95
+)
+```
+
+# Fit Stan Models
+
+## R2D2 Model
+
+```{r}
+R2_mean <- 0.5
+R2_prec <- 1
+api <- 0.5
+
+additional_params <- list(
+  R2_mean = R2_mean,
+  R2_prec = R2_prec,
+  R2_alpha = rep(api, p)
+)
+
+fit_r2d2 <- fit_model(
+  model_name = "r2d2",
+  params = sim_params,
+  additional_params = additional_params
+)
+```
+
+## logitR2 (User-specified)
+
+```{r}
+mu_logitphi <- rep(0, p)
+sigma_sd <- 1
+sigma_logitphi <- chol(diag(sigma_sd, p))
+
+additional_params <- list(
+  R2_mean = 0.5,
+  R2_prec = 1,
+  mu_logitphi = mu_logitphi,
+  sigma_logitphi = sigma_logitphi
+)
+
+fit_logitr2 <- fit_model(
+  model_name = "logitR2",
+  params = sim_params,
+  additional_params = additional_params
+)
+```
+
+## logitR2 (KL values)
+
+```{r}
+api <- 0.5
+alpha <- rep(api, p)
+
+kl.params <- kl.diri.logitnormal(alpha = alpha, ref = 1)
+mu_logitphi <- kl.params$mu
+sigma_logitphi <- t(chol(kl.params$Sigma))
+
+additional_params <- list(
+  R2_mean = 0.5,
+  R2_prec = 1,
+  mu_logitphi = mu_logitphi,
+  sigma_logitphi = sigma_logitphi
+)
+
+fit_logitr2_kl <- fit_model(
+  model_name = "logitR2_invlogit",
+  params = sim_params,
+  additional_params = additional_params
+)
+```
+
+## logitR2 (KL scales)
+
+```{r}
+api <- 0.5
+alpha <- rep(api, p)
+
+kl.params <- kl.diri.logitnormal(alpha = alpha, ref = 1)
+mu_logitphi <- kl.params$mu
+sigma_logitphi <- t(chol(diag(diag(kl.params$Sigma))))
+
+additional_params <- list(
+  R2_mean = 0.5,
+  R2_prec = 1,
+  mu_logitphi = mu_logitphi,
+  sigma_logitphi = sigma_logitphi
+)
+
+fit_logitr2_kl_scales <- fit_model(
+  model_name = "logitR2_invlogit",
+  params = sim_params,
+  additional_params = additional_params
+)
+```
+
+# Summaries and Plots
+
+```{r}
+summary_plots <- function(fit, param = "beta") {
+  p1 <- bayesplot::mcmc_intervals(x = fit$draws(param), prob_outer = 0.99)
+  p1
+}
+
+pp_plot <- function(fit) {
+  ytilde <- fit$draws("y_tilde_test")
+  ytilde <- as.matrix(as_draws_df(ytilde))[, 1:sim_params$ntest]
+  I <- sample(1:nrow(ytilde), 100, replace = FALSE)
+  ppc_dens_overlay(sim_params$ytest, ytilde[I, ]) + 
+    ppc_intervals(sim_params$ytest, ytilde[I, ])
+}
+```
+
+## Parameter Summaries
+
+```{r}
+summary_plots(fit_r2d2, "beta")
+summary_plots(fit_logitr2, "beta")
+summary_plots(fit_logitr2_kl, "beta")
+summary_plots(fit_logitr2_kl_scales, "beta")
+
+summary_plots(fit_r2d2, "R2D2_phi")
+summary_plots(fit_logitr2, "R2_phi")
+summary_plots(fit_logitr2_kl, "R2_phi")
+summary_plots(fit_logitr2_kl_scales, "R2_phi")
+```
+
+## Posterior Predictive Checks
+
+```{r}
+pp_plot(fit_r2d2)
+pp_plot(fit_logitr2)
+pp_plot(fit_logitr2_kl)
+pp_plot(fit_logitr2_kl_scales)
+```
+
+## Predictive R2 Summaries
+
+```{r}
+summary_plots(fit_r2d2, "pred_R2")
+summary_plots(fit_logitr2, "pred_R2")
+```
+
+---
