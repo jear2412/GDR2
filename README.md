@@ -1,7 +1,7 @@
 # Generalized Decomposition Priors on R2
 
 __How to use this repo?__
-The main point of this repo is that the reader gets familiarized with how to use the stan code for the Generalized Decomposition prior. The reader can take a look at exercise.html for this.
+The main point of this repo is that the reader gets familiarized with how to use the Stan code for the Generalized Decomposition prior. The reader can take a look at exercise.html for this.
 
 __Information__
 
